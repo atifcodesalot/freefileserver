@@ -28,16 +28,19 @@ class HttpResponseBuilder:
         self.status_code = status_code
         self.version = version
         self.content = content
-        self.header_fields = header_fields
+        self.header_fields: dict = header_fields
     
     def build(self, encoding) -> str:
-        headers_list = self.header_fields.values()
+        headers_list = self.build_headers()
         response = HttpResponse(http.HTTPStatus(self.status_code), 
                                 self.version, headers_list, self.content)
-        return response.encode(encoding=encoding)
-    
-    def handle_request_header(self, header: str):
-        pass
+        return response.dump_to_binary(encoding=encoding)
         
-    def build_header(self):
-        pass
+    def build_headers(self):
+        headers_list = []
+        pairs = self.header_fields.items()
+        for pair in pairs:
+            headers_list.append(': '.join(pair))
+        return headers_list
+            
+        

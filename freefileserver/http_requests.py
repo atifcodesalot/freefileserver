@@ -40,7 +40,7 @@ class HttpRequest:
         self.fields = parser.fields
         
         self.method = parser.method
-        self.reqpath = parser.reqpath
+        self.uri = parser.reqpath
         self.version = parser.version
         
 
