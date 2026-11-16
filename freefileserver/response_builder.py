@@ -18,7 +18,7 @@ class HttpResponse:
         dumped += statline
         dumped += CRLF.join(self.headers)
         if self.content:
-            dumped += CRLF + self.content
+            dumped += HEADER_SEP + self.content
         return dumped.encode(encoding)
             
     

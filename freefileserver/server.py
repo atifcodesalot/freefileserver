@@ -30,20 +30,23 @@ class FileHttpServer:
         self.socket.bind((self.ipv4addr, self.port))
         self.socket.listen(1024)
 
-    def build_response(self, request: HttpRequest) -> str:
-        builder = HttpResponseBuilder()
+    def build_response(self, request: HttpRequest) -> bytes:
+        status, version, content, headers = \
+            self.http_helper.get_response_params(request)
+        builder = HttpResponseBuilder(status, version, content, **headers)
         return builder.build()
 
     async def start(self):
         self.server = await asyncio.start_server(
             self.serve_client, self.ipv4addr, self.port
         )
-        logger.info("Now serving")
+        logger.info(f"Now serving on http://{self.ipv4addr}:{self.port}")
         async with self.server:
             await self.server.serve_forever()
 
     async def serve_client(self, reader, writer):
         request = await reader.read(1024)
+        logger.debug(f"Received request: {request.decode()}")
         parsed = HttpRequest(request.decode())
         response = self.build_response(parsed)
         writer.write(response)
