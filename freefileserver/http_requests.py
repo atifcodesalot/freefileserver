@@ -15,11 +15,8 @@ class HttpRequestParser:
         self.parse()
 
     def parse(self):
-        logger.debug(f"Parsing request: {self.raw_request}")
         self.headers, self.content = self.raw_request.split(HEADER_SEP)
-        logger.debug(f"Parsed headers: {self.headers}, content: {self.content}")
         self.top, *self.fields_raw = self.headers.split(CRLF)
-        logger.debug(f"Parsed header top: {self.top}, fields: {self.fields_raw}")
         self.parse_header_top()
         self.parse_fields()
 
@@ -48,6 +45,9 @@ class HttpRequest:
         self.method = parser.method
         self.uri = parser.reqpath
         self.version = parser.version
+        
+    def __getattr__(self, name):
+        return self.fields[name]
         
 
     def valid_header_top(self):

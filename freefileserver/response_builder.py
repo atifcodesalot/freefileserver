@@ -17,9 +17,14 @@ class HttpResponse:
         dumped = ""
         dumped += statline
         dumped += CRLF.join(self.headers)
+        content_pytype = type(self.content)
         if self.content:
-            dumped += HEADER_SEP + self.content
-        return dumped.encode(encoding)
+            if content_pytype is str:
+                dumped += HEADER_SEP + self.content
+        encoded = dumped.encode(encoding)
+        if content_pytype is bytes:
+            encoded += HEADER_SEP.encode(encoding) + self.content 
+        return encoded
             
     
 

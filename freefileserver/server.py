@@ -15,14 +15,11 @@ class FileHttpServer:
         self.port = port
         self.root_path = root_path
 
-        self.cwd = root_path
-
-        self.clients = dict()
         self.file_helper = FileHelper(self)
         self.http_helper = HttpHelper(self)
 
         # constant response headers
-        self.const_headers = {"Server"}
+        self.const_headers = {"Server": "FreeFileServer"}
 
     def start_listening(self):
         self.socket.bind((self.ipv4addr, self.port))
@@ -32,6 +29,7 @@ class FileHttpServer:
         status, version, content, headers = self.http_helper.get_response_params(
             request
         )
+        headers.update(self.const_headers)
         builder = HttpResponseBuilder(status, version, content, **headers)
         return builder.build("utf-8")
 
@@ -42,16 +40,34 @@ class FileHttpServer:
         logger.info(f"Now serving on http://{self.ipv4addr}:{self.port}")
         async with self.server:
             await self.server.serve_forever()
-
-    async def serve_client(self, reader, writer):
+            
+    async def serve_exchange(self, reader, writer):
         request = await reader.read(1024)
         logger.debug(f"Received request: {request.decode()}")
-        parsed = HttpRequest(request.decode())
-        response = self.build_response(parsed)
+        if request == b'':
+            return False
+        reqobj = HttpRequest(request.decode())
+        response = self.build_response(reqobj)
         writer.write(response)
         await writer.drain()
+        return reqobj
+
+    async def serve_client(self, reader, writer):
+        reqobj = await self.serve_exchange(reader, writer)
+        if not reqobj:
+            await self.end_client_conn(writer)
+            return
+        await writer.drain()
+        if reqobj.Connection == "keep-alive":
+            while await self.serve_exchange(reader, writer):
+                continue
+                
+        await self.end_client_conn(writer)
 
     async def end_client_conn(self, client_writer):
+        logger.debug(
+            f"Ending client connection with writer: {client_writer.get_extra_info('peername')}"
+        )
         client_writer.close()
         await client_writer.wait_closed()
 
@@ -113,11 +129,14 @@ class HttpHelper:
     def get_response_params(self, req: HttpRequest):
         version = self.get_version()
         filereq_ctx = self.file_helper.get_filereq_ctx(req.uri)
+        logger.debug(
+            f"File request uri: {req.uri}"
+        )
         logger.debug(f"File request context: {filereq_ctx}")
         status = self.get_status(filereq_ctx, req)
         content = self.get_content(filereq_ctx, status)
         headers: dict = self.get_header_fields(filereq_ctx, status, content)
-        
+
         return status, version, content, headers
 
     def get_version(self):
@@ -133,7 +152,7 @@ class HttpHelper:
 
     def get_fileserver_content(self, filepath):
         if self.file_helper.is_directory(filepath):
-            listgen = HTMLListGenerator(self.file_helper.get_files_cwd())
+            listgen = HTMLListGenerator(self.file_helper.get_files(filepath))
             return listgen.construct_html_filelist()
         elif self.file_helper.is_file(filepath):
             return self.file_helper.get_file_content(filepath)
@@ -148,9 +167,13 @@ class HttpHelper:
 
         if content:
             fields["Content-Length"] = str(len(content))
-            fields["Content-Type"] = self.get_mimetype(filereq_ctx)
 
-        elif status is http.HTTPStatus.METHOD_NOT_ALLOWED:
+            if not self.erronous_status(status):
+                fields["Content-Type"] = self.get_mimetype(filereq_ctx)
+            else:
+                fields["Content-Type"] = mimetypes.types_map[".html"]
+
+        if status is http.HTTPStatus.METHOD_NOT_ALLOWED:
             fields["Allow"] = ", ".join(self.allowed)
 
         return fields
@@ -158,17 +181,27 @@ class HttpHelper:
     def get_mimetype(self, filereq_ctx):
         if filereq_ctx.dir_request:
             # html containing list of files
-            return mimetypes.types_map['.html']
-        return mimetypes.types_map[filereq_ctx.ext]
+            return mimetypes.types_map[".html"]
+        return mimetypes.types_map.get(filereq_ctx.ext, "text/plain")
 
 
 class HTMLListGenerator:
     def __init__(self, files: list):
         self.files = files
+        
+        
+    def construct_list_element(self, file_entry):
+        li_html = "<li>"
+        li_html += f'<a href="{file_entry.name}/">{file_entry.path}/</a>'
+        if file_entry.is_dir():
+            li_html += " (dir)"
+        li_html += "</li>"
+        
+        return li_html
 
     def construct_html_filelist(self) -> str:
-        htmllist = "<ul>"
+        html_list = "<ul>"
         for entry in self.files:
-            print(entry)
-            pass
-        return "list"
+            html_list += self.construct_list_element(entry)
+        html_list += "</ul>"
+        return html_list

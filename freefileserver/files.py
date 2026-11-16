@@ -17,6 +17,11 @@ class FileHelper:
         self.root = self.server.root_path
 
     def get_abs_path(self, path):
+        if path.startswith('/'):
+            # remove / from the start of the path
+            # to avoid the legendary behaviour of:
+            # os.path.join('.', '/path') == '/path'
+            path = path[1:]
         abs_path = os.path.join(self.root, path)
         return abs_path
 
@@ -36,17 +41,15 @@ class FileHelper:
 
     def get_file_ext(self, filename):
         # return the last split of .
-        print(filename, "cus")
         return "." + filename.split(".")[-1]
 
-    def get_files_cwd(self):
-        cwd = self.server.cwd
-        return os.scandir(cwd)
+    def get_files(self, filepath):
+        return os.scandir(filepath)
 
     def is_directory(self, filepath):
         if not os.path.exists(filepath):
-            return
-        return os.path.isdir(self.get_abs_path(filepath))
+            return False
+        return os.path.isdir(filepath)
 
     def is_file(self, filepath):
         if not os.path.exists(filepath):
@@ -57,6 +60,7 @@ class FileHelper:
     def to_filepath(self, req_uri: str):
         parsed_url = urllib.parse.urlparse(req_uri)
         normpath = os.path.normpath(parsed_url.path)
+        
         return self.get_abs_path(normpath.replace("/", os.sep))
 
     def get_filename(self, filepath):
@@ -65,8 +69,10 @@ class FileHelper:
     def get_filereq_ctx(self, req_uri) -> FileReqCtx:
         filepath = self.to_filepath(req_uri)
         filename = self.get_filename(filepath)
-        ext = self.get_file_ext(filename)
         exists = os.path.exists(filepath)
-        dir_request = self.is_directory(req_uri)
+        dir_request = self.is_directory(filepath)
+        ext = self.get_file_ext(filename)
+        if dir_request:
+            ext = None
         return FileReqCtx(exists, dir_request, filepath, filename, ext)
             
