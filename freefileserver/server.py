@@ -58,7 +58,7 @@ class FileHttpServer:
         request = await reader.read(1024)
         logger.debug(f"Received request: {request.decode()}")
         if request == b"":
-            return False
+            return None
         reqobj = HttpRequest(request.decode())
         response = self.build_response(reqobj)
         writer.write(response)
@@ -71,7 +71,7 @@ class FileHttpServer:
             await self.end_client_conn(writer)
             return
         await writer.drain()
-        if reqobj.Connection == "keep-alive":
+        if not reqobj.invalid and reqobj.Connection == "keep-alive":
             while await self.serve_exchange(reader, writer):
                 continue
 
@@ -113,7 +113,7 @@ class HttpHelper:
             </body>
             </html>
     """
-    
+
     HTML_400 = """
             <!DOCTYPE html>
             <html>
@@ -157,9 +157,12 @@ class HttpHelper:
 
     def get_response_params(self, req: HttpRequest):
         version = self.get_version()
-        filereq_ctx = self.file_helper.get_filereq_ctx(req.uri)
-        logger.debug(f"File request uri: {req.uri}")
-        logger.debug(f"File request context: {filereq_ctx}")
+        filereq_ctx = (
+            self.file_helper.get_filereq_ctx(req.uri) if not req.invalid else None
+        )
+        if filereq_ctx:
+            logger.debug(f"File request uri: {req.uri}")
+            logger.debug(f"File request context: {filereq_ctx}")
         status = self.get_status(filereq_ctx, req)
         content = self.get_content(filereq_ctx, status)
         headers: dict = self.get_header_fields(filereq_ctx, status, content)
@@ -197,16 +200,15 @@ class HttpHelper:
         if content:
             fields["Content-Length"] = str(len(content))
 
-            if not self.erronous_status(status):
-                fields["Content-Type"] = self.get_mimetype(filereq_ctx)
-            else:
+            if self.erronous_status(status):
                 fields["Content-Type"] = mimetypes.types_map[".html"]
+            else:
+                fields["Content-Type"] = self.get_mimetype(filereq_ctx)
+                if not filereq_ctx.dir_request:
+                    fields["Content-Disposition"] = f'inline; filename="{filereq_ctx.filename}"'
 
         if status is http.HTTPStatus.METHOD_NOT_ALLOWED:
             fields["Allow"] = ", ".join(self.allowed)
-
-        if not filereq_ctx.dir_request:
-            fields["Content-Disposition"] = f'inline; filename="{filereq_ctx.filename}"'
 
         return fields
 
