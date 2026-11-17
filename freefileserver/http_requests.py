@@ -1,6 +1,5 @@
 
 import regex
-from . import logger
 
 CRLF = "\r\n"
 HEADER_SEP = CRLF * 2
@@ -46,12 +45,17 @@ class HttpRequest:
         self.uri = parser.reqpath
         self.version = parser.version
         
+        self.invalid = not self.valid()
+        
     def __getattr__(self, name):
         return self.fields[name]
-        
+    
+    def valid(self):
+        return self.valid_header_top() and self.valid_fields()
 
     def valid_header_top(self):
         return regex.match(REQ_HEADER_REGEX, self.top) is not None
     
     def valid_fields(self):
-        pass
+        # TODO: implement this
+        return True
