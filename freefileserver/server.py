@@ -25,10 +25,23 @@ class FileHttpServer:
         self.socket.bind((self.ipv4addr, self.port))
         self.socket.listen(1024)
 
+    def handle_internal_error(self):
+        status = http.HTTPStatus.INTERNAL_SERVER_ERROR
+        content = "INTERNAL SERVER ERROR"
+        headers = {
+            "Content-Length": str(len(content)),
+            "Content-Type": mimetypes.types_map[".html"],
+        }
+        version = "HTTP/1.1"
+        return status, version, content, headers
+
     def build_response(self, request: HttpRequest) -> bytes:
-        status, version, content, headers = self.http_helper.get_response_params(
-            request
-        )
+        try:
+            status, version, content, headers = self.http_helper.get_response_params(
+                request
+            )
+        except:
+            status, version, content, headers = self.handle_internal_error()
         headers.update(self.const_headers)
         builder = HttpResponseBuilder(status, version, content, **headers)
         return builder.build("utf-8")
@@ -40,11 +53,11 @@ class FileHttpServer:
         logger.info(f"Now serving on http://{self.ipv4addr}:{self.port}")
         async with self.server:
             await self.server.serve_forever()
-            
+
     async def serve_exchange(self, reader, writer):
         request = await reader.read(1024)
         logger.debug(f"Received request: {request.decode()}")
-        if request == b'':
+        if request == b"":
             return False
         reqobj = HttpRequest(request.decode())
         response = self.build_response(reqobj)
@@ -61,7 +74,7 @@ class FileHttpServer:
         if reqobj.Connection == "keep-alive":
             while await self.serve_exchange(reader, writer):
                 continue
-                
+
         await self.end_client_conn(writer)
 
     async def end_client_conn(self, client_writer):
@@ -101,6 +114,18 @@ class HttpHelper:
             </body>
             </html>
     """
+    HTML_401 = lambda resource: f"""
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>401 Unauthorized</title>
+            </head>
+            <body>
+                <h1>401 Unauthorized</h1>
+                <p>You are not authorized to access {resource}</p>
+            </body>
+            </html>
+    """
 
     def __init__(
         self,
@@ -122,6 +147,8 @@ class HttpHelper:
             return http.HTTPStatus.METHOD_NOT_ALLOWED
         elif not filereq_ctx.exists:
             return http.HTTPStatus.NOT_FOUND
+        elif not filereq_ctx.authorized:
+            return http.HTTPStatus.UNAUTHORIZED
         else:
             # default case
             return http.HTTPStatus.OK
@@ -129,9 +156,7 @@ class HttpHelper:
     def get_response_params(self, req: HttpRequest):
         version = self.get_version()
         filereq_ctx = self.file_helper.get_filereq_ctx(req.uri)
-        logger.debug(
-            f"File request uri: {req.uri}"
-        )
+        logger.debug(f"File request uri: {req.uri}")
         logger.debug(f"File request context: {filereq_ctx}")
         status = self.get_status(filereq_ctx, req)
         content = self.get_content(filereq_ctx, status)
@@ -142,12 +167,14 @@ class HttpHelper:
     def get_version(self):
         return "HTTP/" + str(self.server.http_version)
 
-    def handle_error_content(self, status):
+    def handle_error_content(self, filereq_ctx, status):
         content = None
         if status is http.HTTPStatus.NOT_FOUND:
             content = self.HTML_404
         elif status is http.HTTPStatus.INTERNAL_SERVER_ERROR:
             content = self.HTML_500
+        elif status is http.HTTPStatus.UNAUTHORIZED:
+            content = self.__class__.HTML_401(filereq_ctx.filepath)
         return content
 
     def get_fileserver_content(self, filepath):
@@ -155,14 +182,11 @@ class HttpHelper:
             listgen = HTMLListGenerator(filepath, self.file_helper.get_files(filepath))
             return listgen.construct()
         elif self.file_helper.is_file(filepath):
-            try:
-                return self.file_helper.get_file_content(filepath)
-            except PermissionError:
-                pass
+            return self.file_helper.get_file_content(filepath)
 
     def get_content(self, filereq_ctx, status):
         if self.erronous_status(status):
-            return self.handle_error_content(status)
+            return self.handle_error_content(filereq_ctx, status)
         return self.get_fileserver_content(filereq_ctx.filepath)
 
     def get_header_fields(self, filereq_ctx, status, content):
@@ -178,7 +202,7 @@ class HttpHelper:
 
         if status is http.HTTPStatus.METHOD_NOT_ALLOWED:
             fields["Allow"] = ", ".join(self.allowed)
-            
+
         if not filereq_ctx.dir_request:
             fields["Content-Disposition"] = f'inline; filename="{filereq_ctx.filename}"'
 
@@ -194,27 +218,34 @@ class HttpHelper:
 class HTMLListGenerator:
     def __init__(self, parent, files: list):
         self.parent = parent
-        self.files = files
-        
+        self.files = list(files)
+        self.empty = not bool(self.files)
+
     def construct_list_element(self, file_entry):
-        print(file_entry.name, file_entry.path)
         li_html = "<li>"
-        li_html += f'<a href="{file_entry.name}/">{file_entry.name}/</a>'
+        li_html += f'<a href="{file_entry.name}/">{file_entry.name}{"/" if file_entry.is_dir() else ""}</a>'
         if file_entry.is_dir():
-            li_html += " (dir)"
+            li_html += " &#128193; &#x21A9;"
+        else:
+            li_html += " &#128196;"
         li_html += "</li>"
-        
+
         return li_html
 
     def construct_html_filelist(self) -> str:
-        header = f"<h> Directory listing for {self.parent} </h>"
-        html_list = header + "<ul>"
-        for entry in self.files:
-            html_list += self.construct_list_element(entry)
-        html_list += "</ul>"
+        header = (
+            f"<h style='font-size: 24px;'> Directory listing for {self.parent} </h>"
+        )
+        if not self.empty:
+            html_list = header + "<body> <ul>"
+            for entry in self.files:
+                html_list += self.construct_list_element(entry)
+            html_list += "</body></ul>"
+        else:
+            html_list = header + "<ul> looks like this directory is empty. </ul>"
         return html_list
-    
+
     def construct(self):
-        start = "<!DOCTYPE html> <html>"
+        start = "<!DOCTYPE html> <html style='font-family: Arial, sans-serif;'>"
         end = "</html>"
         return start + self.construct_html_filelist() + end

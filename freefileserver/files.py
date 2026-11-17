@@ -10,6 +10,8 @@ class FileReqCtx:
     filepath: str
     filename: str
     ext: str
+    
+    authorized: bool
 
 class FileHelper:
     def __init__(self, server):
@@ -77,5 +79,6 @@ class FileHelper:
         ext = self.get_file_ext(filename)
         if dir_request:
             ext = None
-        return FileReqCtx(exists, dir_request, filepath, filename, ext)
+        authorized = os.access(filepath, os.R_OK)
+        return FileReqCtx(exists, dir_request, filepath, filename, ext, authorized)
             
