@@ -59,7 +59,10 @@ class FileHelper:
     # take an url path and return it to a readable file path
     def to_filepath(self, req_uri: str):
         parsed_url = urllib.parse.urlparse(req_uri)
-        normpath = os.path.normpath(parsed_url.path)
+        # decode uri first
+        path = urllib.parse.unquote(parsed_url.path)
+        # normalize
+        normpath = os.path.normpath(path)
         
         return self.get_abs_path(normpath.replace("/", os.sep))
 
