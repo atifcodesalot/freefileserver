@@ -1,3 +1,5 @@
+from sys import exception
+
 from .files import FileHelper
 from .response_builder import HttpResponseBuilder, http
 from .http_requests import *
@@ -19,11 +21,7 @@ class FileHttpServer:
         self.http_helper = HttpHelper(self)
 
         # constant response headers
-        self.const_headers = {"Server": "FreeFileServer"}
-
-    def start_listening(self):
-        self.socket.bind((self.ipv4addr, self.port))
-        self.socket.listen(1024)
+        self.const_headers = {"Server": "FreeFileServer", "Cache-Control": "no-store"}
 
     def handle_internal_error(self):
         status = http.HTTPStatus.INTERNAL_SERVER_ERROR
@@ -40,7 +38,9 @@ class FileHttpServer:
             status, version, content, headers = self.http_helper.get_response_params(
                 request
             )
-        except:
+        except exception as e:
+            logger.error("An internal error occurred while processing the request.")
+            logger.debug(f"Exception details: {e}")
             status, version, content, headers = self.handle_internal_error()
         headers.update(self.const_headers)
         builder = HttpResponseBuilder(status, version, content, **headers)
@@ -85,7 +85,7 @@ class FileHttpServer:
         await client_writer.wait_closed()
 
     def run(self):
-        asyncio.run(self.start())
+        asyncio.run(self.start(), debug=False)
 
 
 class HttpHelper:
@@ -101,19 +101,6 @@ class HttpHelper:
             </body>
             </html>
     """
-
-    HTML_500 = """
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>500 Internal Server Error</title>
-            </head>
-            <body>
-                <h1>500 Internal Server Error</h1>
-                <p>The server encountered an internal error and was unable to complete your request.</p>
-            </body>
-            </html>
-    """
     HTML_401 = lambda resource: f"""
             <!DOCTYPE html>
             <html>
@@ -123,6 +110,19 @@ class HttpHelper:
             <body>
                 <h1>401 Unauthorized</h1>
                 <p>You are not authorized to access {resource}</p>
+            </body>
+            </html>
+    """
+    
+    HTML_400 = """
+            <!DOCTYPE html>
+            <html>
+            <head>
+                <title>400 Bad Request</title>
+            </head>
+            <body>
+                <h1>400 Bad Request</h1>
+                <p>The server could not understand your request due to invalid syntax.</p>
             </body>
             </html>
     """
@@ -143,7 +143,9 @@ class HttpHelper:
         return status.value >= 400
 
     def get_status(self, filereq_ctx, req: HttpRequest):
-        if req.method.upper() not in self.allowed:
+        if req.invalid:
+            return http.HTTPStatus.BAD_REQUEST
+        elif req.method.upper() not in self.allowed:
             return http.HTTPStatus.METHOD_NOT_ALLOWED
         elif not filereq_ctx.exists:
             return http.HTTPStatus.NOT_FOUND
@@ -171,10 +173,10 @@ class HttpHelper:
         content = None
         if status is http.HTTPStatus.NOT_FOUND:
             content = self.HTML_404
-        elif status is http.HTTPStatus.INTERNAL_SERVER_ERROR:
-            content = self.HTML_500
         elif status is http.HTTPStatus.UNAUTHORIZED:
             content = self.__class__.HTML_401(filereq_ctx.filepath)
+        elif status is http.HTTPStatus.BAD_REQUEST:
+            content = self.HTML_400
         return content
 
     def get_fileserver_content(self, filepath):
