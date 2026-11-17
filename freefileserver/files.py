@@ -19,7 +19,7 @@ class FileHelper:
         self.root = self.server.root_path
 
     def get_abs_path(self, path):
-        if path.startswith('/'):
+        if path.startswith(os.sep):
             # remove / from the start of the path
             # to avoid the legendary behaviour of:
             # os.path.join('.', '/path') == '/path'
@@ -66,7 +66,7 @@ class FileHelper:
         # normalize
         normpath = os.path.normpath(path)
         
-        return self.get_abs_path(normpath.replace("/", os.sep))
+        return self.get_abs_path(normpath)
 
     def get_filename(self, filepath):
         return os.path.basename(filepath)
