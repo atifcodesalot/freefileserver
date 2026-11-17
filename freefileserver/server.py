@@ -38,9 +38,8 @@ class FileHttpServer:
             status, version, content, headers = self.http_helper.get_response_params(
                 request
             )
-        except exception as e:
+        except:
             logger.error("An internal error occurred while processing the request.")
-            logger.debug(f"Exception details: {e}")
             status, version, content, headers = self.handle_internal_error()
         headers.update(self.const_headers)
         builder = HttpResponseBuilder(status, version, content, **headers)
