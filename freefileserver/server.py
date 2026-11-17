@@ -152,10 +152,13 @@ class HttpHelper:
 
     def get_fileserver_content(self, filepath):
         if self.file_helper.is_directory(filepath):
-            listgen = HTMLListGenerator(self.file_helper.get_files(filepath))
-            return listgen.construct_html_filelist()
+            listgen = HTMLListGenerator(filepath, self.file_helper.get_files(filepath))
+            return listgen.construct()
         elif self.file_helper.is_file(filepath):
-            return self.file_helper.get_file_content(filepath)
+            try:
+                return self.file_helper.get_file_content(filepath)
+            except PermissionError:
+                pass
 
     def get_content(self, filereq_ctx, status):
         if self.erronous_status(status):
@@ -175,6 +178,9 @@ class HttpHelper:
 
         if status is http.HTTPStatus.METHOD_NOT_ALLOWED:
             fields["Allow"] = ", ".join(self.allowed)
+            
+        if not filereq_ctx.dir_request:
+            fields["Content-Disposition"] = f'inline; filename="{filereq_ctx.filename}"'
 
         return fields
 
@@ -186,13 +192,14 @@ class HttpHelper:
 
 
 class HTMLListGenerator:
-    def __init__(self, files: list):
+    def __init__(self, parent, files: list):
+        self.parent = parent
         self.files = files
         
-        
     def construct_list_element(self, file_entry):
+        print(file_entry.name, file_entry.path)
         li_html = "<li>"
-        li_html += f'<a href="{file_entry.name}/">{file_entry.path}/</a>'
+        li_html += f'<a href="{file_entry.name}/">{file_entry.name}/</a>'
         if file_entry.is_dir():
             li_html += " (dir)"
         li_html += "</li>"
@@ -200,8 +207,14 @@ class HTMLListGenerator:
         return li_html
 
     def construct_html_filelist(self) -> str:
-        html_list = "<ul>"
+        header = f"<h> Directory listing for {self.parent} </h>"
+        html_list = header + "<ul>"
         for entry in self.files:
             html_list += self.construct_list_element(entry)
         html_list += "</ul>"
         return html_list
+    
+    def construct(self):
+        start = "<!DOCTYPE html> <html>"
+        end = "</html>"
+        return start + self.construct_html_filelist() + end
