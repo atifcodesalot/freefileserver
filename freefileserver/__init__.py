@@ -8,4 +8,4 @@ logging.basicConfig(level=logging.DEBUG,
                     format="[%(name)s][%(asctime)s][%(levelname)s]: %(message)s")
 
 logger = logging.getLogger(__package__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
