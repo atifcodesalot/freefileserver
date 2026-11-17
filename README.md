@@ -10,11 +10,6 @@ clone this repo:
 ```
 git clone https://github.com/atifcodesalot/freefileserver
 ```
-Then install the required packages via pip:
-
-```
-python3 -m pip install -r requirements.txt
-```
 
 Finally:
 
