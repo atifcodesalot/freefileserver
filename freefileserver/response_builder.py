@@ -1,6 +1,6 @@
 
 
-from .http_requests import HttpRequest, CRLF, HEADER_SEP
+from .http_requests import CRLF, HEADER_SEP
 import http
 from dataclasses import dataclass
 
