@@ -1,4 +1,4 @@
-### FreeFileServer
+# FreeFileServer
 
 ## What is FreeFileServer?
 FreeFileServer is an extremely simplistic HTTP file server written in Python. It enables to share a directory on your browser.
