@@ -24,7 +24,7 @@ python3 -m freefileserver [file-path]
 ```
 
 
-### Example usage:
+## Example usage:
 
 ```
 python3 -m freefileserver .
