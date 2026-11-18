@@ -13,8 +13,23 @@ clone this repo:
 git clone https://github.com/atifcodesalot/freefileserver
 ```
 
-Finally:
+Go to the project directory:
+
+```
+cd freefileserver
+```
+
+Finally run the package:
 
 ```
 python3 -m freefileserver [file-path]
 ```
+
+
+## Example usage:
+
+```
+python3 -m freefileserver .
+```
+
+This serves the current (project) directory.
