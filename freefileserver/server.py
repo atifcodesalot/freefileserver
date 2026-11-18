@@ -5,6 +5,7 @@ from .response_builder import HttpResponseBuilder, http
 from .http_requests import *
 import asyncio
 import mimetypes
+import ssl
 
 from . import logger
 
@@ -12,16 +13,31 @@ from . import logger
 class FileHttpServer:
     http_version = 1.1
 
-    def __init__(self, ipv4addr, port, root_path):
+    def __init__(self, ipv4addr, port, root_path, _ssl=False):
         self.ipv4addr = ipv4addr
         self.port = port
         self.root_path = root_path
+        
+        self.init_ssl(ssl_enabled=_ssl)
 
         self.file_helper = FileHelper(self)
         self.http_helper = HttpHelper(self)
 
         # constant response headers
         self.const_headers = {"Server": "FreeFileServer", "Cache-Control": "no-store"}
+        
+    def init_ssl(self, ssl_enabled):
+        self.ssl_context = None
+        if ssl_enabled:
+            try:
+                self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+                self.ssl_context.load_cert_chain(certfile="cert.pem", keyfile="key.pem")
+            except FileNotFoundError:
+                logger.error("certificate or key files are lacking.")
+                self.ssl_context = None
+        
+        if ssl_enabled and self.ssl_context is None:
+            logger.warning("Falling back to HTTP.")
 
     def handle_internal_error(self):
         status = http.HTTPStatus.INTERNAL_SERVER_ERROR
@@ -47,9 +63,10 @@ class FileHttpServer:
 
     async def start(self):
         self.server = await asyncio.start_server(
-            self.serve_client, self.ipv4addr, self.port
+            self.serve_client, self.ipv4addr, self.port, ssl=self.ssl_context
         )
-        logger.info(f"Now serving on http://{self.ipv4addr}:{self.port}")
+        scheme = "http" if self.ssl_context is None else "https"
+        logger.info(f"Now serving on {scheme}://{self.ipv4addr}:{self.port}")
         async with self.server:
             await self.server.serve_forever()
 
