@@ -250,5 +250,6 @@ class HTMLListGenerator:
 
     def construct(self):
         start = "<!DOCTYPE html> <html style='font-family: Arial, sans-serif;'>"
+        start += '\n <head><meta charset="UTF-8"></head>'
         end = "</html>"
         return start + self.construct_html_filelist() + end
