@@ -72,7 +72,10 @@ class FileHttpServer:
 
     async def serve_exchange(self, reader, writer):
         request = await reader.read(1024)
-        logger.debug(f"Received request: {request.decode()}")
+        try:
+            logger.debug(f"Received request: {request.decode()}")
+        except UnicodeDecodeError:
+            pass
         if request == b"":
             return None
         reqobj = HttpRequest(request.decode())
